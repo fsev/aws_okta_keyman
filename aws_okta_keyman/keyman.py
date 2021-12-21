@@ -88,7 +88,7 @@ class Keyman:
                 self.auth_okta()
 
             # Start the AWS session and loop (if using reup)
-            result = self.aws_auth_loop()
+            result = self.aws_auth_loop_multi()
             if result is not None:
                 sys.exit(result)
 
@@ -239,10 +239,14 @@ class Keyman:
         """
         template = self.generate_template(data, header_map)
         selection = -1
-        while selection < 0 or selection > len(data):
+        while selection == -1:
             self.print_selector_table(template, header_map, data)
             try:
-                selection = int(self.user_input("Selection: "))
+                selection = self.user_input("Selection: ")
+                if selection == 'all':
+                    selection = 'all'
+                else:
+                    selection = int(selection)
             except ValueError:
                 self.log.warning('Invalid selection, please try again')
                 continue
@@ -270,11 +274,15 @@ class Keyman:
                 msg = 'No app ID provided; select from available AWS accounts'
                 self.log.warning(msg)
                 header = [{'name': 'Account'}]
+                self.log.info("Type 'all' for every account.")
                 acct_selection = self.selector_menu(accts, header)
             self.config.set_appid_from_account_id(acct_selection)
-            msg = "Using account: {} / {}".format(
-                accts[acct_selection]["name"], accts[acct_selection]["appid"]
-            )
+            if acct_selection != 'all':
+                msg = "Using account: {} / {}".format(
+                    accts[acct_selection]["name"], accts[acct_selection]["appid"]
+                )
+            else:
+                msg = 'Logging into all accounts'
             self.log.info(msg)
 
     def handle_duo_factor_selection(self):
@@ -408,17 +416,17 @@ class Keyman:
         session.role = self.role
         return True
 
-    def start_session(self):
+    def start_session(self, appid = None, name = None):
         """Initialize AWS session object."""
         self.log.info('Getting SAML Assertion from {org}'.format(
             org=self.config.org))
         assertion = self.okta_client.get_assertion(
-            appid=self.config.appid)
+            appid=appid)
 
         try:
             self.log.info("Starting AWS session for {}".format(
                 self.config.region))
-            session = aws.Session(assertion, profile=self.config.name,
+            session = aws.Session(assertion, profile=name,
                                   role=self.role, region=self.config.region,
                                   session_duration=self.config.duration)
 
@@ -428,7 +436,18 @@ class Keyman:
             raise aws.InvalidSaml()
         return session
 
-    def aws_auth_loop(self):
+    def aws_auth_loop_multi(self):
+        if self.config.appid == 'all':
+            for acct in self.config.accounts:
+                self.aws_auth_loop(acct['appid'], acct['name'])
+        else:
+            self.aws_auth_loop()
+
+    def aws_auth_loop(self, appid = None, name = None):
+        if(appid is None):
+            appid = self.config.appid
+            name = self.config.name
+
         """Once we're authenticated with an OktaSaml client object we use that
         object to get a fresh SAMLResponse repeatedly and refresh our AWS
         Credentials.
@@ -444,8 +463,7 @@ class Keyman:
                 continue
 
             try:
-                session = self.start_session()
-
+                session = self.start_session(appid, name)
                 if not self.handle_multiple_roles(session):
                     return 1
 

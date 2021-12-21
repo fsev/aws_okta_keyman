@@ -245,9 +245,12 @@ class Session(object):
         if print_only:
             self._print_creds()
         else:
-            self._write()
+            self._write(self.roles[0]['account'])
 
-    def _write(self):
+    def _write(self, profile_name = None):
+        if profile_name is not None:
+            self.profile = profile_name
+
         """Write out our secrets to the Credentials object."""
         self.writer.add_profile(
             name=self.profile,

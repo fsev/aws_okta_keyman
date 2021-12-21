@@ -30,6 +30,11 @@ from aws_okta_keyman.metadata import __version__
 LOG = logging.getLogger(__name__)
 
 
+class Acct:
+    def __init__(self, name, id):
+        self.name = name
+        self.id = id
+
 class Config:
     """Config class for all tool configuration settings."""
 
@@ -56,6 +61,7 @@ class Config:
         self.update = None
         self.account = None
         self.role = None
+        self.accts = []
 
         if len(argv) > 1:
             if argv[1] == 'config':
@@ -74,8 +80,16 @@ class Config:
         return full_url
 
     def set_appid_from_account_id(self, account_id):
-        """Take an account ID (list index) and sets the appid based on that."""
-        self.appid = self.accounts[account_id]['appid']
+        if account_id == 'all':
+            self.name = 'all'
+            self.appid = 'all'
+        else:
+            """Take an account ID (list index) and sets the appid based on that."""
+            self.appid = self.accounts[account_id]['appid']
+            self.name = self.accounts[account_id]['name']
+
+    def set_all(self, name, id):
+        self.acct.append(Acct(name, id))
 
     def validate(self):
         """Ensure we have all the settings we need before continuing."""
